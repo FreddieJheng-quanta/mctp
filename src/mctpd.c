@@ -1747,9 +1747,8 @@ out:
 
 /* Queries an endpoint peer. Addressing is standard eid/net.
  */
-static int endpoint_query_peer(const struct peer *peer, uint8_t req_type,
-			       const void *req, size_t req_len, uint8_t **resp,
-			       size_t *resp_len,
+static int endpoint_query_peer(const struct peer *peer, const void *req,
+			       size_t req_len, uint8_t **resp, size_t *resp_len,
 			       struct sockaddr_mctp_ext *resp_addr)
 {
 	struct sockaddr_mctp_ext addr = { 0 };
@@ -1763,7 +1762,7 @@ static int endpoint_query_peer(const struct peer *peer, uint8_t req_type,
 	addr.smctp_base.smctp_network = peer->net;
 	addr.smctp_base.smctp_addr.s_addr = peer->eid;
 
-	addr.smctp_base.smctp_type = req_type;
+	addr.smctp_base.smctp_type = MCTP_CTRL_HDR_MSG_TYPE;
 	addr.smctp_base.smctp_tag = MCTP_TAG_OWNER;
 
 	return endpoint_query_addr(peer->ctx, &addr, false, req, req_len, resp,
@@ -1773,8 +1772,8 @@ static int endpoint_query_peer(const struct peer *peer, uint8_t req_type,
 /* Queries an endpoint using physical addressing, null EID.
  */
 static int endpoint_query_phys(struct ctx *ctx, const dest_phys *dest,
-			       uint8_t req_type, const void *req,
-			       size_t req_len, uint8_t **resp, size_t *resp_len,
+			       const void *req, size_t req_len, uint8_t **resp,
+			       size_t *resp_len,
 			       struct sockaddr_mctp_ext *resp_addr)
 {
 	struct sockaddr_mctp_ext addr = { 0 };
@@ -1793,7 +1792,7 @@ static int endpoint_query_phys(struct ctx *ctx, const dest_phys *dest,
 	addr.smctp_halen = dest->hwaddr_len;
 	memcpy(addr.smctp_haddr, dest->hwaddr, dest->hwaddr_len);
 
-	addr.smctp_base.smctp_type = req_type;
+	addr.smctp_base.smctp_type = MCTP_CTRL_HDR_MSG_TYPE;
 	addr.smctp_base.smctp_tag = MCTP_TAG_OWNER;
 
 	return endpoint_query_addr(ctx, &addr, true, req, req_len, resp,
@@ -1829,8 +1828,8 @@ static int endpoint_send_set_endpoint_id(const struct peer *peer,
 	req.operation =
 		mctp_ctrl_cmd_set_eid_set_eid; // TODO: do we want Force?
 	req.eid = peer->eid;
-	rc = endpoint_query_phys(peer->ctx, dest, MCTP_CTRL_HDR_MSG_TYPE, &req,
-				 sizeof(req), &buf, &buf_size, &addr);
+	rc = endpoint_query_phys(peer->ctx, dest, &req, sizeof(req), &buf,
+				 &buf_size, &addr);
 	if (rc < 0)
 		goto out;
 
@@ -2448,12 +2447,11 @@ static int query_get_endpoint_id(struct ctx *ctx, const dest_phys *dest,
 				   MCTP_CTRL_CMD_GET_ENDPOINT_ID);
 
 	if (peer)
-		rc = endpoint_query_peer(peer, MCTP_CTRL_HDR_MSG_TYPE, &req,
-					 sizeof(req), &buf, &buf_size, &addr);
+		rc = endpoint_query_peer(peer, &req, sizeof(req), &buf,
+					 &buf_size, &addr);
 	else
-		rc = endpoint_query_phys(ctx, dest, MCTP_CTRL_HDR_MSG_TYPE,
-					 &req, sizeof(req), &buf, &buf_size,
-					 &addr);
+		rc = endpoint_query_phys(ctx, dest, &req, sizeof(req), &buf,
+					 &buf_size, &addr);
 	if (rc < 0)
 		goto out;
 
@@ -2558,8 +2556,8 @@ static int query_get_peer_msgtypes(struct peer *peer)
 	mctp_ctrl_msg_hdr_init_req(&req.ctrl_hdr, iid,
 				   MCTP_CTRL_CMD_GET_MESSAGE_TYPE_SUPPORT);
 
-	rc = endpoint_query_peer(peer, MCTP_CTRL_HDR_MSG_TYPE, &req,
-				 sizeof(req), &buf, &buf_size, &addr);
+	rc = endpoint_query_peer(peer, &req, sizeof(req), &buf, &buf_size,
+				 &addr);
 	if (rc < 0)
 		goto out;
 
@@ -2617,8 +2615,8 @@ static int query_get_peer_vdm_types(struct peer *peer)
 			free(buf);
 			buf = NULL;
 		}
-		rc = endpoint_query_peer(peer, MCTP_CTRL_HDR_MSG_TYPE, &req,
-					 sizeof(req), &buf, &buf_size, &addr);
+		rc = endpoint_query_peer(peer, &req, sizeof(req), &buf,
+					 &buf_size, &addr);
 		if (rc < 0)
 			break;
 
@@ -2725,8 +2723,8 @@ static int query_get_peer_uuid_by_phys(struct ctx *ctx, const dest_phys *dest,
 	mctp_ctrl_msg_hdr_init_req(&req.ctrl_hdr, iid,
 				   MCTP_CTRL_CMD_GET_ENDPOINT_UUID);
 
-	rc = endpoint_query_phys(ctx, dest, MCTP_CTRL_HDR_MSG_TYPE, &req,
-				 sizeof(req), &buf, &buf_size, &addr);
+	rc = endpoint_query_phys(ctx, dest, &req, sizeof(req), &buf, &buf_size,
+				 &addr);
 	if (rc < 0)
 		goto out;
 
@@ -2765,8 +2763,8 @@ static int query_get_peer_uuid(struct peer *peer)
 	mctp_ctrl_msg_hdr_init_req(&req.ctrl_hdr, iid,
 				   MCTP_CTRL_CMD_GET_ENDPOINT_UUID);
 
-	rc = endpoint_query_peer(peer, MCTP_CTRL_HDR_MSG_TYPE, &req,
-				 sizeof(req), &buf, &buf_size, &addr);
+	rc = endpoint_query_peer(peer, &req, sizeof(req), &buf, &buf_size,
+				 &addr);
 	if (rc < 0)
 		goto out;
 
@@ -5495,8 +5493,8 @@ static int endpoint_send_allocate_endpoint_ids(
 	req.alloc_eid_op = (uint8_t)(op & 0x03);
 	req.pool_size = eid_pool_size;
 	req.start_eid = eid_start;
-	rc = endpoint_query_peer(peer, MCTP_CTRL_HDR_MSG_TYPE, &req,
-				 sizeof(req), &buf, &buf_size, &addr);
+	rc = endpoint_query_peer(peer, &req, sizeof(req), &buf, &buf_size,
+				 &addr);
 	if (rc < 0)
 		goto out;
 
