@@ -3189,9 +3189,13 @@ static int query_peer_properties(struct peer *peer)
 	}
 
 	rc = query_get_peer_uuid(peer);
-	if (rc < 0 && peer->ctx->verbose) {
-		errno = -rc;
-		warn("Error getting UUID for %s", peer_tostr(peer));
+	if (rc < 0) {
+		if (peer->ctx->verbose) {
+			errno = -rc;
+			warn("Error getting UUID for %s", peer_tostr(peer));
+		}
+		if (rc != -ETIMEDOUT)
+			rc = 0;
 	}
 
 	// TODO: emit property changed? Though currently they are all const.
